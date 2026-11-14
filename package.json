@@ -1,0 +1,52 @@
+{
+  "name": "opencode-session-timestamps",
+  "version": "1.0.0",
+  "description": "Session, turn and message timestamps for OpenCode Desktop: dates for sessions and inline send/answer times in the transcript",
+  "author": "Realmagnum <realmagnum@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Realmagnum/opencode-session-timestamps.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Realmagnum/opencode-session-timestamps/issues"
+  },
+  "homepage": "https://github.com/Realmagnum/opencode-session-timestamps#readme",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "opencode-desktop",
+    "opencode-gui",
+    "timestamps",
+    "sessions",
+    "transcript",
+    "solidjs"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "files": [
+    "dist",
+    "src",
+    "server.js",
+    "gui-experimental.cjs",
+    "README.md",
+    "README_RU.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "vite build && cp dist/gui-experimental.cjs gui-experimental.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "ci": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "^2.3.0",
+    "solid-js": "^1.9.18",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.6",
+    "vite-plugin-solid": "^2.11.15"
+  }
+}
