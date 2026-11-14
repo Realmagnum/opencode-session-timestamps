@@ -34,6 +34,40 @@ All times follow the app language and update live when a session changes.
 
 ---
 
+## 📸 Screenshots
+
+### Home session list
+
+![Home session list with a last-activity time on every row](assets/home-session-list.png)
+
+Every row ends with the session's last activity, so a session from today, yesterday or last month no longer looks the same.
+
+### Session header
+
+![Created and updated times in the session header](assets/session-header.png)
+
+A session's **Created** and **Updated** times sit beside its token and cost readout; the full date with seconds is in the tooltip.
+
+### Settings
+
+<img src="assets/settings.png" alt="Settings page for Session Timestamps" width="520" />
+
+**Settings → Session Timestamps**: a master switch, one toggle per surface, friendly or always-absolute dates, a 12/24-hour clock, and a live preview in the app language.
+
+### Quick switch
+
+![Clock button beside the sidebar toggle](assets/sidebar-quick-toggle.png)
+
+The clock button beside the panel toggle hides or shows every date in one click (dimmed when off).
+
+### Tab hover preview
+
+![Created and Updated lines in the tab hover preview](assets/tab-hover-preview.png)
+
+The tab hover preview gains separate **Created** and **Updated** lines with full, localized dates.
+
+---
+
 ## 📦 Installation
 
 ### Option A: install from GitHub
