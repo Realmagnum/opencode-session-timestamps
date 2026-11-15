@@ -229,6 +229,32 @@ export function setupDomTimestamps(input: {
   // A session can remember a model that was later renamed: `gemini-3.8-flash-high`
   // while the catalog now lists `google/gemini-3.8-flash`. Match the bare model
   // name after dropping a provider path and a reasoning-variant suffix.
+  const catalogSyncing = new Set<string>()
+  const catalogSynced = new Map<string, number>()
+
+  // The app syncs the catalog of the routed session's location only. Rows from
+  // another server or directory therefore see no `model.list` until this runs.
+  const syncCatalog = (serverID: string, directory?: string) => {
+    const key = `${serverID}\u0000${directory ?? ""}`
+    const ref = input.ctx.servers.get(serverID)
+
+    if (!ref || catalogSyncing.has(key)) return
+    if (Date.now() - (catalogSynced.get(key) ?? 0) < 60_000) return
+
+    catalogSyncing.add(key)
+    catalogSynced.set(key, Date.now())
+
+    const target = directory ? { directory } : undefined
+
+    void Promise.all([ref.data.location.provider.sync(target), ref.data.location.model.sync(target)])
+      .catch(() => {})
+      .finally(() => {
+        catalogSyncing.delete(key)
+        context.clear()
+        schedule()
+      })
+  }
+
   const bareModel = (id: string) => (id.split("/").pop() ?? id).replace(VARIANT_SUFFIX, "")
 
   const modelLimit = (
@@ -267,6 +293,8 @@ export function setupDomTimestamps(input: {
     const ref = input.ctx.servers.get(serverID)
     const models = ref?.data.location.model.list(directory ? { directory } : undefined)
     const limit = modelLimit(models, last.model ?? fallback ?? last.model)
+
+    if (!models || !limit) syncCatalog(serverID, directory)
 
     if (!limit) return undefined
 
@@ -333,11 +361,12 @@ export function setupDomTimestamps(input: {
 
       if (messages.length > 0) {
         const usage = usageFrom(messages, found.serverID, found.info.location?.directory, found.info.model)
-        const previous = context.get(sessionID)
 
-        context.set(sessionID, { at: entry.updated, usage: usage ?? previous?.usage })
+        if (usage) {
+          context.set(sessionID, { at: entry.updated, usage })
 
-        if (usage) return usage
+          return usage
+        }
       }
 
       enqueueContext(sessionID, found.serverID, entry.updated, found.info.location?.directory)

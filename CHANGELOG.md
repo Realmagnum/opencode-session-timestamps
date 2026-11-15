@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-11-15
+
+### Fixed
+
+- **Rings missing on sessions from another server or directory.** The app syncs the provider/model catalog of the routed session's location only, so rows elsewhere read an empty `model.list` and could not resolve `limit.context`. The plugin now syncs that location's catalog on demand (once a minute per server + directory, alongside the app's own `location.provider.sync` / `location.model.sync`) and repaints when it lands. A completed sync also clears the negative usage cache, so a row that was tried before the catalog arrived gets a second chance.
+- Verified against the app's built-in Context panel: `cpamp / gemini-3.8-flash-high` resolves to a 1,000,000 window there; those rows now show the ring instead of dropping it.
+
+---
+
 ## [1.2.1] - 2026-11-15
 
 ### Fixed
