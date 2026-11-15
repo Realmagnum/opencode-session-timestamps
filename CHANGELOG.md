@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-11-15
+
+### Fixed
+
+- **Missing context rings on some sessions.** Those sessions remember a model that was renamed or removed from the catalog (for example `cpamp/gemini-3.8-flash-high` while the catalog now lists `google/gemini-3.8-flash`), so matching by exact `providerID` + model id found no `limit.context` and the ring was dropped. The lookup now falls back to the bare model name after dropping a provider path and a reasoning-variant suffix (`-high`, `-medium`, `-low`, `-minimal`, `-max`, `-thinking`, `-xhigh`), preferring the same provider. It also falls back to the session's own model when the last assistant message carries none.
+
+---
+
 ## [1.2.0] - 2026-11-15
 
 ### Added

@@ -41,6 +41,7 @@ const REFRESH_DEBOUNCE = 1_500
 const REFRESH_INTERVAL = 60_000
 const CONTEXT_CONCURRENCY = 2
 const CONTEXT_MAX_AGE = 7 * 86_400_000
+const VARIANT_SUFFIX = /-(high|medium|low|minimal|max|thinking|xhigh)$/
 const RING_RADIUS = 6.25
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
@@ -225,7 +226,38 @@ export function setupDomTimestamps(input: {
 
   // ---- context usage -----------------------------------------------------
 
-  const usageFrom = (messages: readonly SessionMessageInfo[], serverID: string, directory?: string) => {
+  // A session can remember a model that was later renamed: `gemini-3.8-flash-high`
+  // while the catalog now lists `google/gemini-3.8-flash`. Match the bare model
+  // name after dropping a provider path and a reasoning-variant suffix.
+  const bareModel = (id: string) => (id.split("/").pop() ?? id).replace(VARIANT_SUFFIX, "")
+
+  const modelLimit = (
+    models: ReturnType<NonNullable<ReturnType<Context["servers"]["get"]>>["data"]["location"]["model"]["list"]> | undefined,
+    ref: { providerID: string; id: string },
+  ) => {
+    if (!models) return undefined
+
+    const exact = models.findLast(
+      (item) => item.providerID === ref.providerID && (item.id === ref.id || item.modelID === ref.id),
+    )
+
+    if (exact?.limit.context) return exact.limit.context
+
+    const base = bareModel(ref.id)
+    const candidates = models.filter((item) => bareModel(item.id) === base || bareModel(item.modelID) === base)
+    const sameProvider = candidates.findLast((item) => item.providerID === ref.providerID && item.limit.context)
+
+    if (sameProvider?.limit.context) return sameProvider.limit.context
+
+    return candidates.findLast((item) => item.limit.context)?.limit.context
+  }
+
+  const usageFrom = (
+    messages: readonly SessionMessageInfo[],
+    serverID: string,
+    directory?: string,
+    fallback?: { providerID: string; id: string },
+  ) => {
     const last = [...messages].reverse().find((message) => message.type === "assistant" && message.tokens)
 
     if (!last || last.type !== "assistant" || !last.tokens) return undefined
@@ -234,11 +266,7 @@ export function setupDomTimestamps(input: {
     const used = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
     const ref = input.ctx.servers.get(serverID)
     const models = ref?.data.location.model.list(directory ? { directory } : undefined)
-    const model = models?.findLast(
-      (item) =>
-        item.providerID === last.model.providerID && (item.id === last.model.id || item.modelID === last.model.id),
-    )
-    const limit = model?.limit.context
+    const limit = modelLimit(models, last.model ?? fallback ?? last.model)
 
     if (!limit) return undefined
 
@@ -304,7 +332,7 @@ export function setupDomTimestamps(input: {
       const messages = found.ref.data.session.message.list(sessionID)
 
       if (messages.length > 0) {
-        const usage = usageFrom(messages, found.serverID, found.info.location?.directory)
+        const usage = usageFrom(messages, found.serverID, found.info.location?.directory, found.info.model)
         const previous = context.get(sessionID)
 
         context.set(sessionID, { at: entry.updated, usage: usage ?? previous?.usage })

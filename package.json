@@ -1,6 +1,6 @@
 {
   "name": "opencode-session-timestamps",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Session, turn and message timestamps for OpenCode Desktop: dates for sessions and inline send/answer times in the transcript",
   "author": "Realmagnum <realmagnum@gmail.com>",
   "license": "MIT",
