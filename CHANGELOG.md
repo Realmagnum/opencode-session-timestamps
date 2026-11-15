@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-11-15
+
+### Added
+
+- **Context usage rings** — every sidebar row and session tab shows how much of the model's context window the session's last answer used, with the same 14px ring the session header draws. Neutral below 80%, amber from 80%, red from 95%; the tooltip names the percentage, the used tokens and the model limit.
+- **Ring switch in the sidebar header** — a second ghost button beside the clock hides or shows the rings, independent of the date switch.
+- **Separate Settings section** — "Context usage" with its own switch, so rings and dates can be enabled independently.
+- Data comes from the last assistant message's token usage and the model catalog's `limit.context`; rows whose messages are not loaded fetch `session.context` lazily (two at a time, cached by `time.updated`, recent sessions only).
+
+### Changed
+
+- The sidebar and tab date now sit in a trailing cluster immediately before the status dot, leaving room for the ring between them.
+
+---
+
 ## [1.0.0] - 2026-11-14
 
 ### Added

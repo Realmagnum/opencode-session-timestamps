@@ -17,6 +17,8 @@ export const TimestampSettingsSchema = Schema.Struct({
   sidebar: Schema.optional(Schema.Boolean),
   /** Send and answer times inside the transcript. */
   messages: Schema.Boolean,
+  /** Context-usage rings in sidebar rows and tabs. */
+  contextRing: Schema.optional(Schema.Boolean),
   /** `auto` reads "Today, 15:42" / "12 Nov, 15:42"; `absolute` always carries the date. */
   format: FormatSchema,
   clock: ClockSchema,
@@ -27,12 +29,16 @@ export type StoredSettings = typeof TimestampSettingsSchema.Type
 /** The master switch; optional so settings stored before it existed still show dates. */
 export const datesEnabled = (settings: StoredSettings) => settings.enabled !== false
 
+/** Context rings have their own switch, independent of the date switch. */
+export const contextEnabled = (settings: StoredSettings) => settings.contextRing !== false
+
 export const DEFAULT_SETTINGS: StoredSettings = {
   enabled: true,
   header: true,
   home: true,
   sidebar: true,
   messages: true,
+  contextRing: true,
   format: "auto",
   clock: "auto",
 }

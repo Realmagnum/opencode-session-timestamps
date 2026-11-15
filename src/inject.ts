@@ -1,44 +1,59 @@
 import type { Context } from "@opencode/plugin/gui"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { createEffect, on, onCleanup } from "solid-js"
 import { resolveTranslation } from "./i18n"
-import { datesEnabled, type StoredSettings } from "./settings"
+import { contextEnabled, datesEnabled, type StoredSettings } from "./settings"
 import { formatAbsolute, formatFull, formatStamp, formatTurn } from "./time"
 
-type SessionEntry = { readonly created: number; readonly updated: number; readonly title?: string }
-
-const sidebarEnabled = (settings: StoredSettings) => settings.sidebar !== false
-
-
-const SIDEBAR_TOGGLE = 'button[aria-controls="vertical-tabs-sidebar"]'
-const COLLAPSED_TOGGLE = '[data-slot="collapsed-sidebar-toggle"]'
-
-const CLOCK_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6.6"/><path d="M10 6.2V10l2.6 1.7"/></svg>`
+type SessionEntry = {
+  readonly id: string
+  readonly created: number
+  readonly updated: number
+  readonly title?: string
+  readonly directory?: string
+  readonly serverID?: string
+}
 
 type Turn = { readonly sent: number; answered?: number }
+
+type ContextUsage = { readonly percent: number; readonly used: number; readonly limit: number }
 
 const HOME_ROW = '[data-component="home-session-row-container"]'
 const HOME_BUTTON = '[data-component="home-session-row"]'
 const SIDEBAR_ROW = "[data-titlebar-tab-action]"
 const TAB_LINK = "[data-titlebar-tab-link]"
+const TIMELINE_ROW = "[data-timeline] [data-timeline-row][data-message-id]"
 const TAB_POPOVER = '[data-component="session-tab-popover"]'
 const TAB_POPOVER_TRIGGER = '[data-component="session-tab-popover-trigger"]:hover'
-const TIMELINE_ROW = "[data-timeline] [data-timeline-row][data-message-id]"
 const SESSION_IN_HREF = /\/session\/(ses_[A-Za-z0-9]+)/
+
+const sidebarEnabled = (settings: StoredSettings) => settings.sidebar !== false
 const FALLBACK_TITLE = /^(New session|Child session) - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+
+const SIDEBAR_TOGGLE = 'button[aria-controls="vertical-tabs-sidebar"]'
+const COLLAPSED_TOGGLE = '[data-slot="collapsed-sidebar-toggle"]'
+
+const CLOCK_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6.6"/><path d="M10 6.2V10l2.6 1.7"/></svg>`
+const RING_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="6.6" opacity="0.35"/><path d="M10 3.4a6.6 6.6 0 0 1 5.72 9.9"/></svg>`
+
+const REFRESH_LIMIT = 500
+const REFRESH_DEBOUNCE = 1_500
+const REFRESH_INTERVAL = 60_000
+const CONTEXT_CONCURRENCY = 2
+const CONTEXT_MAX_AGE = 7 * 86_400_000
+const RING_RADIUS = 6.25
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
 /** The label the app prints for a session row, matching `displayLabel` in @opencode/util. */
 const displayTitle = (title: string | undefined) =>
   title ? (title.match(FALLBACK_TITLE)?.[1] ?? title) : undefined
 
-const REFRESH_LIMIT = 500
-const REFRESH_DEBOUNCE = 1_500
-const REFRESH_INTERVAL = 60_000
-
 /**
- * Draws times the app itself does not render: a last-activity stamp on Home and
- * sidebar rows, a clock on session tabs, and a send/answer stamp on every
- * transcript turn. The app has no slot for any of them, so the nodes are
- * appended to its DOM and reconciled on mutation.
+ * Draws times and context rings the app itself does not render: last-activity
+ * stamps and rings on Home, sidebar and tab rows, clock and ring switches in
+ * the sidebar header, a send/answer clock on transcript turns, and created /
+ * updated lines in the tab preview. The app has no slot for any of them, so
+ * the nodes are appended to its DOM and reconciled on mutation.
  */
 export function setupDomTimestamps(input: {
   ctx: Context
@@ -46,6 +61,7 @@ export function setupDomTimestamps(input: {
   locale: () => string
   translate: (key: string, params?: Record<string, string | number | boolean>) => string
   toggle: () => void
+  toggleContext: () => void
 }) {
   if (typeof document === "undefined") return { schedule: () => {} }
 
@@ -54,10 +70,19 @@ export function setupDomTimestamps(input: {
   const index = new Map<string, SessionEntry>()
   const refreshing = new Set<string>()
   const unsubscribes: Array<() => void> = []
-  let lastTab: string | undefined
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
   let passFrame: number | undefined
   let stopped = false
+  let lastTab: string | undefined
+
+  // Context usage by session id, keyed by the session's `time.updated` so a
+  // finished turn refetches while repaints do not.
+  const context = new Map<string, { at: number; usage?: ContextUsage }>()
+  const contextQueue: Array<{ id: string; serverID: string; at: number; directory?: string }> = []
+  const contextQueued = new Set<string>()
+  const contextRunning = new Set<string>()
+  const contextFetched = new Map<string, number>()
+  const CONTEXT_MIN_INTERVAL = 5_000
 
   const t = (key: string, params?: Record<string, string | number | boolean>) => {
     const value = input.translate(key, params)
@@ -71,11 +96,32 @@ export function setupDomTimestamps(input: {
     clock: input.settings().clock,
   })
 
-  const timeFor = (sessionID: string): SessionEntry | undefined => {
-    for (const serverID of input.ctx.servers.list()) {
-      const info = input.ctx.servers.get(serverID)?.data.session.get(sessionID)
+  const compact = (value: number) =>
+    new Intl.NumberFormat(input.locale(), { notation: "compact", maximumFractionDigits: 0 }).format(value)
 
-      if (info?.time) return { created: info.time.created, updated: info.time.updated ?? info.time.created, title: info.title }
+  const lookup = (sessionID: string) => {
+    for (const serverID of input.ctx.servers.list()) {
+      const ref = input.ctx.servers.get(serverID)
+      const info = ref?.data.session.get(sessionID)
+
+      if (info?.time) return { ref, info, serverID }
+    }
+
+    return undefined
+  }
+
+  const timeFor = (sessionID: string): SessionEntry | undefined => {
+    const found = lookup(sessionID)
+
+    if (found?.info.time) {
+      return {
+        id: found.info.id,
+        created: found.info.time.created,
+        updated: found.info.time.updated ?? found.info.time.created,
+        title: found.info.title,
+        directory: found.info.location?.directory,
+        serverID: found.serverID,
+      }
     }
 
     return index.get(sessionID)
@@ -88,9 +134,11 @@ export function setupDomTimestamps(input: {
     for (const serverID of input.ctx.servers.list()) {
       for (const session of input.ctx.servers.get(serverID)?.data.session.list() ?? []) {
         sessions.set(session.id, {
+          id: session.id,
           created: session.time.created,
           updated: session.time.updated ?? session.time.created,
           title: session.title,
+          directory: session.location?.directory,
         })
       }
     }
@@ -142,9 +190,12 @@ export function setupDomTimestamps(input: {
 
       for (const session of response.data) {
         index.set(session.id, {
+          id: session.id,
           created: session.time.created,
           updated: session.time.updated ?? session.time.created,
           title: session.title,
+          directory: session.location?.directory,
+          serverID,
         })
       }
 
@@ -172,7 +223,114 @@ export function setupDomTimestamps(input: {
     })
   }
 
-  function write(element: HTMLTimeElement, entry: SessionEntry) {
+  // ---- context usage -----------------------------------------------------
+
+  const usageFrom = (messages: readonly SessionMessageInfo[], serverID: string, directory?: string) => {
+    const last = [...messages].reverse().find((message) => message.type === "assistant" && message.tokens)
+
+    if (!last || last.type !== "assistant" || !last.tokens) return undefined
+
+    const tokens = last.tokens
+    const used = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+    const ref = input.ctx.servers.get(serverID)
+    const models = ref?.data.location.model.list(directory ? { directory } : undefined)
+    const model = models?.findLast(
+      (item) =>
+        item.providerID === last.model.providerID && (item.id === last.model.id || item.modelID === last.model.id),
+    )
+    const limit = model?.limit.context
+
+    if (!limit) return undefined
+
+    return { percent: Math.round((used / limit) * 100), used, limit }
+  }
+
+  const pumpContext = () => {
+    while (!stopped && contextRunning.size < CONTEXT_CONCURRENCY && contextQueue.length > 0) {
+      const job = contextQueue.shift()
+
+      if (!job) return
+      if (context.get(job.id)?.at === job.at) {
+        contextQueued.delete(job.id)
+
+        continue
+      }
+
+      const ref = input.ctx.servers.get(job.serverID)
+
+      if (!ref) {
+        contextQueued.delete(job.id)
+
+        continue
+      }
+
+      contextRunning.add(job.id)
+
+      void ref.client.session
+        .context({ sessionID: job.id })
+        .then((messages) => {
+          context.set(job.id, { at: job.at, usage: usageFrom(messages, job.serverID, job.directory) })
+        })
+        .catch(() => {
+          context.set(job.id, { at: job.at })
+        })
+        .finally(() => {
+          contextRunning.delete(job.id)
+          contextQueued.delete(job.id)
+          contextFetched.set(job.id, Date.now())
+          pumpContext()
+          schedule()
+        })
+    }
+  }
+
+  const enqueueContext = (sessionID: string, serverID: string, at: number, directory?: string) => {
+    if (contextQueued.has(sessionID) || contextRunning.has(sessionID) || contextQueue.length >= 24) return
+    if (Date.now() - (contextFetched.get(sessionID) ?? 0) < CONTEXT_MIN_INTERVAL) return
+
+    contextQueued.add(sessionID)
+    contextQueue.push({ id: sessionID, serverID, at, directory })
+    pumpContext()
+  }
+
+  const usageFor = (sessionID: string, entry: SessionEntry): ContextUsage | undefined => {
+    const found = lookup(sessionID)
+
+    if (found?.ref) {
+      const cached = context.get(sessionID)
+
+      if (cached && cached.at >= entry.updated) return cached.usage
+
+      const messages = found.ref.data.session.message.list(sessionID)
+
+      if (messages.length > 0) {
+        const usage = usageFrom(messages, found.serverID, found.info.location?.directory)
+        const previous = context.get(sessionID)
+
+        context.set(sessionID, { at: entry.updated, usage: usage ?? previous?.usage })
+
+        if (usage) return usage
+      }
+
+      enqueueContext(sessionID, found.serverID, entry.updated, found.info.location?.directory)
+
+      return context.get(sessionID)?.usage
+    }
+
+    const cached = context.get(sessionID)
+
+    if (cached && cached.at >= entry.updated) return cached.usage
+
+    if (entry.serverID && Date.now() - entry.updated < CONTEXT_MAX_AGE) {
+      enqueueContext(sessionID, entry.serverID, entry.updated, entry.directory)
+    }
+
+    return cached?.usage
+  }
+
+  // ---- stamps ------------------------------------------------------------
+
+  function writeDate(element: HTMLTimeElement, entry: SessionEntry) {
     const text = formatStamp(entry.updated, options())
 
     if (element.textContent !== text) element.textContent = text
@@ -186,27 +344,30 @@ export function setupDomTimestamps(input: {
     element.dateTime = new Date(entry.updated).toISOString()
   }
 
-  function stampRow(parent: HTMLElement, kind: "home" | "sidebar", entry: SessionEntry | undefined) {
-    let element = parent.querySelector<HTMLTimeElement>(`:scope > [data-ocst-kind="${kind}"]`)
+  function homeStamp(container: HTMLElement, button: HTMLElement) {
+    const sessionID = container.dataset.sessionId
+    const entry = sessionID ? timeFor(sessionID) : undefined
 
-    if (!entry) {
-      element?.remove()
+    if (!sessionID || !entry) {
+      button.querySelector<HTMLElement>(':scope > [data-ocst-kind="home"]')?.remove()
 
       return
     }
 
+    let element = button.querySelector<HTMLTimeElement>(':scope > [data-ocst-kind="home"]')
+
     if (!element) {
       element = document.createElement("time")
-      element.dataset.ocstKind = kind
-      element.className = kind === "home" ? "ocst-home" : "ocst-side"
-      parent.append(element)
+      element.dataset.ocstKind = "home"
+      element.className = "ocst-home"
+      button.append(element)
     }
 
-    write(element, entry)
+    writeDate(element, entry)
   }
 
   function renderHome() {
-    if (!input.settings().home) {
+    if (!input.settings().home || !datesEnabled(input.settings())) {
       remove("home")
 
       return
@@ -214,57 +375,154 @@ export function setupDomTimestamps(input: {
 
     document.querySelectorAll<HTMLElement>(HOME_ROW).forEach((container) => {
       const button = container.querySelector<HTMLElement>(HOME_BUTTON)
-      const sessionID = container.dataset.sessionId
 
-      if (button) stampRow(button, "home", sessionID ? timeFor(sessionID) : undefined)
+      if (button) homeStamp(container, button)
     })
+  }
+
+  function ensureDate(trail: HTMLElement, entry: SessionEntry, on: boolean) {
+    let element = trail.querySelector<HTMLTimeElement>(':scope > [data-ocst-kind="date"]')
+
+    if (!on) {
+      element?.remove()
+
+      return
+    }
+
+    if (!element) {
+      element = document.createElement("time")
+      element.dataset.ocstKind = "date"
+      element.className = trail.dataset.ocstTrail === "tab" ? "ocst-tab-time" : "ocst-side-time"
+      trail.prepend(element)
+    }
+
+    writeDate(element, entry)
+  }
+
+  function ensureRing(trail: HTMLElement, sessionID: string, entry: SessionEntry, on: boolean) {
+    let ring = trail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring"]')
+
+    if (!on) {
+      ring?.remove()
+
+      return
+    }
+
+    const usage = usageFor(sessionID, entry)
+
+    if (!usage) {
+      ring?.remove()
+
+      return
+    }
+
+    if (!ring) {
+      ring = document.createElement("span")
+      ring.dataset.ocstKind = "ring"
+      ring.className = "ocst-ring"
+      ring.innerHTML = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="${RING_RADIUS}" stroke="var(--v2-background-bg-layer-04, rgba(255,255,255,0.12))" stroke-width="1.5"/><circle data-ocst-arc cx="7" cy="7" r="${RING_RADIUS}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(-90 7 7)"/></svg>`
+      trail.append(ring)
+    }
+
+    const arc = ring.querySelector<SVGCircleElement>("[data-ocst-arc]")
+    const percent = Math.max(0, Math.min(100, usage.percent))
+    const offset = RING_CIRCUMFERENCE * (1 - percent / 100)
+
+    if (arc) {
+      arc.setAttribute("stroke-dasharray", RING_CIRCUMFERENCE.toFixed(2))
+      arc.setAttribute("stroke-dashoffset", offset.toFixed(2))
+    }
+
+    const level = usage.percent >= 95 ? "critical" : usage.percent >= 80 ? "high" : "normal"
+
+    if (ring.dataset.level !== level) ring.dataset.level = level
+
+    const title = t("ring.title", {
+      percent: usage.percent,
+      used: compact(usage.used),
+      limit: compact(usage.limit),
+    })
+
+    if (ring.title !== title) ring.title = title
+  }
+
+  function ensureTrail(
+    parent: HTMLElement,
+    kind: "side" | "tab",
+    sessionID: string,
+    entry: SessionEntry,
+    showDate: boolean,
+  ) {
+    const dates = showDate
+    const rings = contextEnabled(input.settings())
+    const selector = `:scope > [data-ocst-kind="trail-${kind}"]`
+    let trail = parent.querySelector<HTMLElement>(selector)
+
+    if (!dates && !rings) {
+      trail?.remove()
+
+      return
+    }
+
+    if (!trail) {
+      trail = document.createElement("span")
+      trail.dataset.ocstKind = `trail-${kind}`
+      trail.dataset.ocstTrail = kind
+      trail.className = kind === "tab" ? "ocst-trail ocst-trail--tab" : "ocst-trail"
+
+      if (kind === "tab") parent.append(trail)
+      else parent.insertBefore(trail, parent.lastElementChild)
+    }
+
+    ensureDate(trail, entry, dates)
+    ensureRing(trail, sessionID, entry, rings)
   }
 
   function renderSidebar() {
     const rows = document.querySelectorAll<HTMLElement>(SIDEBAR_ROW)
 
-    if (!sidebarEnabled(input.settings()) || rows.length === 0) {
-      if (!sidebarEnabled(input.settings())) remove("sidebar")
-
-      return
-    }
+    if (rows.length === 0) return
 
     const unique = titles()
 
     rows.forEach((row) => {
       const title = row.getAttribute("title")?.trim()
-
-      stampRow(row, "sidebar", title ? unique.get(title) : undefined)
-    })
-  }
-
-  function renderTabs() {
-    if (!sidebarEnabled(input.settings())) {
-      remove("tab")
-      remove("popover")
-
-      return
-    }
-
-    document.querySelectorAll<HTMLAnchorElement>(TAB_LINK).forEach((link) => {
-      let element = link.querySelector<HTMLTimeElement>(':scope > [data-ocst-kind="tab"]')
-      const sessionID = link.getAttribute("href")?.match(SESSION_IN_HREF)?.[1]
-      const entry = sessionID ? timeFor(sessionID) : undefined
+      const entry = title ? unique.get(title) : undefined
 
       if (!entry) {
-        element?.remove()
+        row.querySelector<HTMLElement>(':scope > [data-ocst-kind="trail-side"]')?.remove()
 
         return
       }
 
-      if (!element) {
-        element = document.createElement("time")
-        element.dataset.ocstKind = "tab"
-        element.className = "ocst-tab"
-        link.append(element)
+      ensureTrail(
+        row,
+        "side",
+        entry.id,
+        entry,
+        datesEnabled(input.settings()) && sidebarEnabled(input.settings()),
+      )
+    })
+  }
+
+  function renderTabs() {
+    document.querySelectorAll<HTMLAnchorElement>(TAB_LINK).forEach((link) => {
+      const sessionID = link.getAttribute("href")?.match(SESSION_IN_HREF)?.[1]
+      const entry = sessionID ? timeFor(sessionID) : undefined
+
+      if (!entry) {
+        link.querySelector<HTMLElement>(':scope > [data-ocst-kind="trail-tab"]')?.remove()
+
+        return
       }
 
-      write(element, entry)
+      ensureTrail(
+        link,
+        "tab",
+        sessionID ?? "",
+        entry,
+        datesEnabled(input.settings()) && sidebarEnabled(input.settings()),
+      )
     })
 
     renderPopover()
@@ -296,7 +554,7 @@ export function setupDomTimestamps(input: {
     const entry = sessionID ? timeFor(sessionID) : undefined
     let block = popover.querySelector<HTMLElement>(':scope > [data-ocst-kind="popover"]')
 
-    if (!entry || !sidebarEnabled(input.settings())) {
+    if (!entry || !datesEnabled(input.settings()) || !sidebarEnabled(input.settings())) {
       block?.remove()
 
       return
@@ -386,7 +644,7 @@ export function setupDomTimestamps(input: {
   function renderMessages() {
     const session = input.ctx.sessions.current()
 
-    if (!input.settings().messages || !session) {
+    if (!datesEnabled(input.settings()) || !input.settings().messages || !session) {
       remove("turn")
 
       return
@@ -405,46 +663,67 @@ export function setupDomTimestamps(input: {
     })
   }
 
-  // The sidebar header already owns a panel toggle; the dates get their own
-  // switch beside it so the whole set can be hidden without opening Settings.
-  function renderToggle() {
-    const anchor = Array.from(document.querySelectorAll<HTMLElement>(SIDEBAR_TOGGLE)).find(
-      (element) => !element.closest(COLLAPSED_TOGGLE),
-    )
-    const wrapper = anchor?.parentElement
-    let button = document.querySelector<HTMLButtonElement>('[data-ocst-kind="toggle"]')
+  // ---- header switches ---------------------------------------------------
 
-    if (!wrapper || !wrapper.parentElement) {
-      button?.remove()
-
-      return
-    }
+  function toggleButton(kind: "toggle" | "context-toggle", icon: string, label: string, on: boolean, run: () => void) {
+    let button = document.querySelector<HTMLButtonElement>(`[data-ocst-kind="${kind}"]`)
 
     if (!button) {
       button = document.createElement("button")
-      button.dataset.ocstKind = "toggle"
+      button.dataset.ocstKind = kind
       button.type = "button"
       button.className = "ocst-toggle"
-      button.innerHTML = CLOCK_SVG
+      button.innerHTML = icon
       button.addEventListener("click", (event) => {
         event.preventDefault()
         event.stopPropagation()
-        input.toggle()
+        run()
       })
     }
-
-    if (button.parentElement !== wrapper.parentElement || button.nextElementSibling !== wrapper) {
-      wrapper.parentElement.insertBefore(button, wrapper)
-    }
-
-    const on = datesEnabled(input.settings())
-    const label = t(on ? "toggle.hide" : "toggle.show")
 
     button.dataset.on = on ? "true" : "false"
     button.setAttribute("aria-pressed", on ? "true" : "false")
     button.setAttribute("aria-label", label)
 
     if (button.title !== label) button.title = label
+
+    return button
+  }
+
+  function renderToggle() {
+    const anchor = Array.from(document.querySelectorAll<HTMLElement>(SIDEBAR_TOGGLE)).find(
+      (element) => !element.closest(COLLAPSED_TOGGLE),
+    )
+    const wrapper = anchor?.parentElement
+    const button = document.querySelector<HTMLButtonElement>('[data-ocst-kind="toggle"]')
+    const contextButton = document.querySelector<HTMLButtonElement>('[data-ocst-kind="context-toggle"]')
+
+    if (!wrapper || !wrapper.parentElement) {
+      button?.remove()
+      contextButton?.remove()
+
+      return
+    }
+
+    const on = datesEnabled(input.settings())
+    const clock = toggleButton("toggle", CLOCK_SVG, t(on ? "toggle.hide" : "toggle.show"), on, input.toggle)
+
+    const beforeWrapper =
+      clock.parentElement === wrapper.parentElement &&
+      (clock.compareDocumentPosition(wrapper) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+
+    if (!beforeWrapper) wrapper.parentElement.insertBefore(clock, wrapper)
+
+    const rings = contextEnabled(input.settings())
+    const ringButton = toggleButton(
+      "context-toggle",
+      RING_SVG,
+      t(rings ? "toggle.context.hide" : "toggle.context.show"),
+      rings,
+      input.toggleContext,
+    )
+
+    if (ringButton.previousElementSibling !== clock) clock.after(ringButton)
   }
 
   function render() {
@@ -452,14 +731,9 @@ export function setupDomTimestamps(input: {
 
     renderToggle()
 
-    if (!datesEnabled(input.settings())) {
-      remove("home")
-      remove("sidebar")
-      remove("tab")
-      remove("popover")
-      remove("turn")
-
-      return
+    if (!contextEnabled(input.settings())) {
+      contextQueue.length = 0
+      contextQueued.clear()
     }
 
     renderHome()
@@ -546,7 +820,11 @@ export function setupDomTimestamps(input: {
     remove("popover")
     remove("turn")
     remove("toggle")
+    remove("context-toggle")
+    remove("trail-side")
+    remove("trail-tab")
   })
 
   return { schedule }
 }
+

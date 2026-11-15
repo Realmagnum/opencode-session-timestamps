@@ -41,35 +41,49 @@ export const GUI_CSS = `
 }
 [data-component="home-session-row-container"]:hover .ocst-home { opacity: 0; }
 
-.ocst-side {
+.ocst-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex: none;
-  padding-inline-start: 6px;
+  min-width: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.ocst-trail--tab { margin-inline-end: 24px; }
+.ocst-side-time,
+.ocst-tab-time {
   font-size: 11px;
   line-height: var(--line-height-compact, 1.3);
   color: var(--v2-text-text-faint, #8a8a8a);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0.85;
-  pointer-events: none;
-  user-select: none;
 }
-
-.ocst-tab {
-  flex: none;
-  margin-inline-end: 24px;
+.ocst-tab-time {
   font-size: 10px;
   line-height: 1;
-  color: var(--v2-text-text-faint, #8a8a8a);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   opacity: 0.8;
-  pointer-events: none;
-  user-select: none;
 }
-[data-titlebar-tab]:hover .ocst-tab { opacity: 0; }
-@container (max-width: 150px) {
-  .ocst-tab { display: none; }
+[data-titlebar-tab]:hover .ocst-trail--tab { opacity: 0; }
+@container (max-width: 160px) {
+  .ocst-trail--tab .ocst-tab-time { display: none; }
 }
+@container (max-width: 120px) {
+  .ocst-trail--tab { display: none; }
+}
+
+.ocst-ring {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--v2-icon-icon-base, #eeeeee);
+  opacity: 0.9;
+}
+.ocst-ring svg { width: 14px; height: 14px; }
+.ocst-ring[data-level="high"] { color: var(--v2-state-fg-warning, #e0af68); }
+.ocst-ring[data-level="critical"] { color: var(--v2-state-fg-danger, #f7768e); }
 
 .ocst-popover {
   display: flex;
@@ -380,7 +394,7 @@ export function SettingsView(props: {
   ]
 
   const Toggle = (row: {
-    key: "enabled" | "header" | "home" | "sidebar" | "messages"
+    key: "enabled" | "header" | "home" | "sidebar" | "messages" | "contextRing"
     label: string
     desc: string
   }) => (
@@ -454,6 +468,15 @@ export function SettingsView(props: {
         <Toggle key="home" label={t("settings.show.home")} desc={t("settings.show.home.desc")} />
         <Toggle key="sidebar" label={t("settings.show.sidebar")} desc={t("settings.show.sidebar.desc")} />
         <Toggle key="messages" label={t("settings.show.messages")} desc={t("settings.show.messages.desc")} />
+      </div>
+
+      <div class="ocst-settings-card">
+        <div class="ocst-settings-card-title">{t("settings.section.context")}</div>
+        <Toggle
+          key="contextRing"
+          label={t("settings.show.context")}
+          desc={t("settings.show.context.desc")}
+        />
       </div>
 
       <div class="ocst-settings-card">
