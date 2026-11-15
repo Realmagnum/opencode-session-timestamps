@@ -25,11 +25,12 @@ This plugin adds those chronology anchors without touching the server: it reads 
 - **Sidebar session list** — the same stamp. Sidebar rows carry no session id in the DOM, so they are matched by their unique title; duplicate titles are skipped.
 - **Session tabs** — a compact clock that reserves the app's 24px status area, so unread/attention dots and the close button never overlap it. Hidden on hover and in tabs narrower than 150px.
 - **Tab hover preview** — separate **Created** and **Updated** lines with localized full dates.
-- **Context usage rings** — every sidebar row and tab shows the share of the model's context window its last answer used, drawn with the same 14px ring as the session header. Neutral below 80%, amber from 80%, red from 95%; the tooltip names the percentage, used tokens and limit.
+- **Context usage rings** — every Home row, sidebar row and tab shows the share of the model's context window its last answer used, drawn with the same 14px ring as the session header. Neutral below 80%, amber from 80%, red from 95%; the tooltip names the percentage, used tokens and limit.
 - **Transcript turns** — `15:42 → 15:43` above each user message: when it was sent and when its answer finished. Running turns show the send time only.
 - **Quick switches** — a clock button beside the sidebar toggle hides or shows every date, and a ring button next to it does the same for context rings, both without opening Settings (dimmed when off).
 - **Settings → Session Timestamps** — a master switch and a toggle per surface for dates, a separate **Context usage** section for rings, friendly (`15:42`, `Yesterday, 09:05`, `12 Nov, 15:42`) or always-absolute dates, a 12/24-hour clock, and a live preview in the current language.
 - **Localized** — English and Russian catalogs; the app language is followed live, with an English fallback.
+- **Light and dark** — every injected surface reads the app's theme variables, with `light-dark()` fallbacks, so the plugin follows the app theme without its own palette.
 
 All times follow the app language and update live when a session changes.
 

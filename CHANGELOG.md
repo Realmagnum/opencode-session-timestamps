@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-11-15
+
+### Added
+
+- **Context rings on Home** — Home session rows now show the same ring as the sidebar and tabs, placed next to the last-activity stamp; it follows the Context usage switch, not the Home date switch.
+- **Light theme support** — every injected surface now reads the app's theme variables, with `light-dark()` fallbacks for the cases where a variable is missing: muted text and borders, hover washes, the ring track, and a darker purple accent and Plugin badge on light backgrounds.
+
+---
+
 ## [1.1.0] - 2026-11-15
 
 ### Added

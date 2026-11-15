@@ -344,39 +344,23 @@ export function setupDomTimestamps(input: {
     element.dateTime = new Date(entry.updated).toISOString()
   }
 
-  function homeStamp(container: HTMLElement, button: HTMLElement) {
-    const sessionID = container.dataset.sessionId
-    const entry = sessionID ? timeFor(sessionID) : undefined
-
-    if (!sessionID || !entry) {
-      button.querySelector<HTMLElement>(':scope > [data-ocst-kind="home"]')?.remove()
-
-      return
-    }
-
-    let element = button.querySelector<HTMLTimeElement>(':scope > [data-ocst-kind="home"]')
-
-    if (!element) {
-      element = document.createElement("time")
-      element.dataset.ocstKind = "home"
-      element.className = "ocst-home"
-      button.append(element)
-    }
-
-    writeDate(element, entry)
-  }
-
   function renderHome() {
-    if (!input.settings().home || !datesEnabled(input.settings())) {
-      remove("home")
-
-      return
-    }
+    const settings = input.settings()
 
     document.querySelectorAll<HTMLElement>(HOME_ROW).forEach((container) => {
       const button = container.querySelector<HTMLElement>(HOME_BUTTON)
+      const sessionID = container.dataset.sessionId
+      const entry = sessionID ? timeFor(sessionID) : undefined
 
-      if (button) homeStamp(container, button)
+      if (!button) return
+
+      if (!sessionID || !entry) {
+        button.querySelector<HTMLElement>(':scope > [data-ocst-kind="trail-home"]')?.remove()
+
+        return
+      }
+
+      ensureTrail(button, "home", sessionID, entry, datesEnabled(settings) && settings.home)
     })
   }
 
@@ -420,7 +404,7 @@ export function setupDomTimestamps(input: {
       ring = document.createElement("span")
       ring.dataset.ocstKind = "ring"
       ring.className = "ocst-ring"
-      ring.innerHTML = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="${RING_RADIUS}" stroke="var(--v2-background-bg-layer-04, rgba(255,255,255,0.12))" stroke-width="1.5"/><circle data-ocst-arc cx="7" cy="7" r="${RING_RADIUS}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(-90 7 7)"/></svg>`
+      ring.innerHTML = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="${RING_RADIUS}" stroke="var(--ocst-ring-track, var(--v2-background-bg-layer-04))" stroke-width="1.5"/><circle data-ocst-arc cx="7" cy="7" r="${RING_RADIUS}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(-90 7 7)"/></svg>`
       trail.append(ring)
     }
 
@@ -448,7 +432,7 @@ export function setupDomTimestamps(input: {
 
   function ensureTrail(
     parent: HTMLElement,
-    kind: "side" | "tab",
+    kind: "home" | "side" | "tab",
     sessionID: string,
     entry: SessionEntry,
     showDate: boolean,
@@ -468,10 +452,10 @@ export function setupDomTimestamps(input: {
       trail = document.createElement("span")
       trail.dataset.ocstKind = `trail-${kind}`
       trail.dataset.ocstTrail = kind
-      trail.className = kind === "tab" ? "ocst-trail ocst-trail--tab" : "ocst-trail"
+      trail.className = `ocst-trail ocst-trail--${kind}`
 
-      if (kind === "tab") parent.append(trail)
-      else parent.insertBefore(trail, parent.lastElementChild)
+      if (kind === "side") parent.insertBefore(trail, parent.lastElementChild)
+      else parent.append(trail)
     }
 
     ensureDate(trail, entry, dates)
@@ -814,7 +798,7 @@ export function setupDomTimestamps(input: {
     document.removeEventListener("visibilitychange", onVisibility)
     document.removeEventListener("pointerover", trackTab, true)
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe()
-    remove("home")
+    remove("trail-home")
     remove("sidebar")
     remove("tab")
     remove("popover")

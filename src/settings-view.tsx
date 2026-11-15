@@ -17,7 +17,7 @@ export const GUI_CSS = `
   min-width: 0;
   font-size: 11px;
   line-height: var(--line-height-compact, 1.3);
-  color: var(--v2-text-text-faint, #8a8a8a);
+  color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a));
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -25,21 +25,7 @@ export const GUI_CSS = `
 .ocst-header time { color: inherit; }
 .ocst-header-sep { opacity: 0.6; }
 
-.ocst-home {
-  flex: none;
-  margin-inline-end: 2px;
-  padding-inline-start: 8px;
-  font-size: 11px;
-  line-height: var(--line-height-compact, 1.3);
-  color: var(--v2-text-text-faint, #8a8a8a);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  opacity: 0.85;
-  transition: opacity 120ms ease-in-out;
-  pointer-events: none;
-  user-select: none;
-}
-[data-component="home-session-row-container"]:hover .ocst-home { opacity: 0; }
+[data-component="home-session-row-container"]:hover .ocst-trail--home { opacity: 0; }
 
 .ocst-trail {
   display: inline-flex;
@@ -49,13 +35,14 @@ export const GUI_CSS = `
   min-width: 0;
   pointer-events: none;
   user-select: none;
+  transition: opacity 120ms ease-in-out;
 }
 .ocst-trail--tab { margin-inline-end: 24px; }
 .ocst-side-time,
 .ocst-tab-time {
   font-size: 11px;
   line-height: var(--line-height-compact, 1.3);
-  color: var(--v2-text-text-faint, #8a8a8a);
+  color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0.85;
@@ -74,16 +61,17 @@ export const GUI_CSS = `
 }
 
 .ocst-ring {
+  --ocst-ring-track: var(--v2-background-bg-layer-04, light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.12)));
   display: inline-flex;
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--v2-icon-icon-base, #eeeeee);
+  color: var(--v2-icon-icon-base, light-dark(#1f1f1f, #eeeeee));
   opacity: 0.9;
 }
 .ocst-ring svg { width: 14px; height: 14px; }
-.ocst-ring[data-level="high"] { color: var(--v2-state-fg-warning, #e0af68); }
-.ocst-ring[data-level="critical"] { color: var(--v2-state-fg-danger, #f7768e); }
+.ocst-ring[data-level="high"] { color: var(--v2-state-fg-warning, light-dark(#9a6700, #e0af68)); }
+.ocst-ring[data-level="critical"] { color: var(--v2-state-fg-danger, light-dark(#cf222e, #f7768e)); }
 
 .ocst-popover {
   display: flex;
@@ -102,18 +90,18 @@ export const GUI_CSS = `
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--v2-icon-icon-muted, #8a8a8a);
+  color: var(--v2-icon-icon-muted, light-dark(#5f5f5f, #8a8a8a));
   cursor: pointer;
   -webkit-app-region: no-drag;
   transition: color 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
 .ocst-toggle svg { width: 16px; height: 16px; }
 .ocst-toggle:hover {
-  background: var(--v2-overlay-simple-overlay-hover, rgba(255, 255, 255, 0.06));
-  color: var(--v2-text-text-base, #eeeeee);
+  background: var(--v2-overlay-simple-overlay-hover, light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06)));
+  color: var(--v2-text-text-base, light-dark(#1f1f1f, #eeeeee));
 }
-.ocst-toggle[data-on="true"] { color: var(--v2-text-text-base, #eeeeee); }
-.ocst-toggle[data-on="false"] { color: var(--v2-text-text-faint, #8a8a8a); opacity: 0.65; }
+.ocst-toggle[data-on="true"] { color: var(--v2-text-text-base, light-dark(#1f1f1f, #eeeeee)); }
+.ocst-toggle[data-on="false"] { color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a)); opacity: 0.65; }
 
 .ocst-turn {
   display: flex;
@@ -121,7 +109,7 @@ export const GUI_CSS = `
   margin-bottom: 2px;
   font-size: 11px;
   line-height: var(--line-height-compact, 1.3);
-  color: var(--v2-text-text-faint, #8a8a8a);
+  color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
@@ -134,14 +122,14 @@ export const GUI_CSS = `
   justify-content: space-between;
   gap: 24px;
   padding: 14px 0;
-  border-bottom: 1px solid var(--v2-border-border-base, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--v2-border-border-base, light-dark(rgba(0, 0, 0, 0.10), rgba(255, 255, 255, 0.08)));
 }
 .ocst-settings-row:last-child { border-bottom: none; }
 .ocst-settings-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.ocst-settings-label { font-size: 13px; font-weight: 530; color: var(--v2-text-text-base, #eeeeee); }
-.ocst-settings-desc { font-size: 12px; color: var(--v2-text-text-faint, #8a8a8a); }
+.ocst-settings-label { font-size: 13px; font-weight: 530; color: var(--v2-text-text-base, light-dark(#1f1f1f, #eeeeee)); }
+.ocst-settings-desc { font-size: 12px; color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a)); }
 .ocst-settings-card {
-  border: 1px solid var(--v2-border-border-base, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--v2-border-border-base, light-dark(rgba(0, 0, 0, 0.10), rgba(255, 255, 255, 0.08)));
   border-radius: 10px;
   padding: 4px 16px;
   margin-bottom: 20px;
@@ -151,7 +139,7 @@ export const GUI_CSS = `
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--v2-text-text-faint, #8a8a8a);
+  color: var(--v2-text-text-faint, light-dark(#6b6b6b, #8a8a8a));
   margin: 14px 0 4px;
 }
 .ocst-switch {
@@ -160,8 +148,8 @@ export const GUI_CSS = `
   width: 34px;
   height: 20px;
   border-radius: 999px;
-  border: 1px solid var(--v2-border-border-base, rgba(255, 255, 255, 0.16));
-  background: var(--v2-background-bg-layer-02, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--v2-border-border-base, light-dark(rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.16)));
+  background: var(--v2-background-bg-layer-02, light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06)));
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease;
   padding: 0;
@@ -190,9 +178,9 @@ export const GUI_CSS = `
   height: 30px;
   padding: 0 8px;
   border-radius: 7px;
-  border: 1px solid var(--v2-border-border-base, rgba(255, 255, 255, 0.16));
-  background: var(--v2-background-bg-layer-02, rgba(255, 255, 255, 0.06));
-  color: var(--v2-text-text-base, #eeeeee);
+  border: 1px solid var(--v2-border-border-base, light-dark(rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.16)));
+  background: var(--v2-background-bg-layer-02, light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06)));
+  color: var(--v2-text-text-base, light-dark(#1f1f1f, #eeeeee));
   font-size: 12px;
   outline: none;
 }
@@ -201,25 +189,25 @@ export const GUI_CSS = `
   flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
-  color: var(--v2-text-text-muted, #b0b0b0);
+  color: var(--v2-text-text-muted, light-dark(#5f5f5f, #b0b0b0));
   font-variant-numeric: tabular-nums;
 }
 .ocst-preview span {
   padding: 3px 8px;
   border-radius: 6px;
-  background: var(--v2-background-bg-layer-02, rgba(255, 255, 255, 0.06));
+  background: var(--v2-background-bg-layer-02, light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06)));
 }
 .ocst-reset {
   height: 28px;
   padding: 0 12px;
   border-radius: 7px;
-  border: 1px solid var(--v2-border-border-base, rgba(255, 255, 255, 0.16));
+  border: 1px solid var(--v2-border-border-base, light-dark(rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.16)));
   background: transparent;
-  color: var(--v2-text-text-muted, #b0b0b0);
+  color: var(--v2-text-text-muted, light-dark(#5f5f5f, #b0b0b0));
   font-size: 12px;
   cursor: pointer;
 }
-.ocst-reset:hover { color: var(--v2-text-text-base, #ffffff); }
+.ocst-reset:hover { color: var(--v2-text-text-base, light-dark(#121212, #ffffff)); }
 
 .plugin-settings-gear-btn {
   display: inline-flex;
@@ -231,19 +219,19 @@ export const GUI_CSS = `
   border-radius: 4px;
   background: transparent;
   border: none;
-  color: var(--v2-text-text-muted, #8a8a8a);
+  color: var(--v2-text-text-muted, light-dark(#6b6b6b, #8a8a8a));
   cursor: pointer;
   transition: color 0.15s ease, background-color 0.15s ease;
   flex-shrink: 0;
 }
 .plugin-settings-gear-btn:hover {
-  color: #b392f0 !important;
-  background-color: var(--v2-background-bg-layer-02, rgba(255, 255, 255, 0.08));
+  color: light-dark(#6b4fae, #b392f0) !important;
+  background-color: var(--v2-background-bg-layer-02, light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.08)));
 }
 .plugin-settings-gear-btn svg { width: 16px; height: 16px; }
 
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"][data-value="${PLUGIN}"] [data-slot="tabs-v2-trigger"] svg {
-  color: #9d7cd8 !important;
+  color: light-dark(#6b4fae, #9d7cd8) !important;
 }
 `
 
@@ -433,21 +421,21 @@ export function SettingsView(props: {
         margin: "0 auto",
         padding: "32px 24px",
         "font-family": "var(--font-family-sans, -apple-system, BlinkMacSystemFont, sans-serif)",
-        color: "var(--v2-text-text-base, #eeeeee)",
+        color: "var(--v2-text-text-base, light-dark(#1f1f1f, #eeeeee))",
       }}
     >
       <div style={{ "margin-bottom": "28px" }}>
         <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "6px" }}>
-          <h1 style={{ "font-size": "20px", "font-weight": "600", margin: "0", color: "var(--v2-text-text-base, #ffffff)" }}>
+          <h1 style={{ "font-size": "20px", "font-weight": "600", margin: "0", color: "var(--v2-text-text-base, light-dark(#121212, #ffffff))" }}>
             {t("settings.header.title")}
           </h1>
           <span
             style={{
               "font-size": "11px",
               "font-weight": "500",
-              color: "#b392f0",
-              background: "rgba(157, 124, 216, 0.15)",
-              border: "1px solid rgba(157, 124, 216, 0.35)",
+              color: "light-dark(#6b4fae, #b392f0)",
+              background: "light-dark(rgba(107, 79, 174, 0.10), rgba(157, 124, 216, 0.15))",
+              border: "1px solid light-dark(rgba(107, 79, 174, 0.30), rgba(157, 124, 216, 0.35))",
               "border-radius": "10px",
               padding: "1px 7px",
               "line-height": "1.4",
@@ -456,7 +444,7 @@ export function SettingsView(props: {
             Plugin
           </span>
         </div>
-        <p style={{ "font-size": "13px", color: "var(--v2-text-text-muted, #b0b0b0)", margin: "0", "line-height": "1.5" }}>
+        <p style={{ "font-size": "13px", color: "var(--v2-text-text-muted, light-dark(#5f5f5f, #b0b0b0))", margin: "0", "line-height": "1.5" }}>
           {t("settings.header.desc")}
         </p>
       </div>
