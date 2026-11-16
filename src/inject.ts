@@ -39,6 +39,11 @@ const RING_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" str
 const REFRESH_LIMIT = 500
 const REFRESH_DEBOUNCE = 1_500
 const REFRESH_INTERVAL = 60_000
+/**
+ * The transcript streams text constantly, and every pass walks the document, so
+ * passes are rate-limited instead of running once per animation frame.
+ */
+const PASS_INTERVAL = 250
 const CONTEXT_CONCURRENCY = 2
 const CONTEXT_MAX_AGE = 7 * 86_400_000
 const VARIANT_SUFFIX = /-(high|medium|low|minimal|max|thinking|xhigh)$/
@@ -73,6 +78,8 @@ export function setupDomTimestamps(input: {
   const unsubscribes: Array<() => void> = []
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
   let passFrame: number | undefined
+  let passTimer: ReturnType<typeof setTimeout> | undefined
+  let lastPass = 0
   let stopped = false
   let lastTab: string | undefined
 
@@ -111,7 +118,21 @@ export function setupDomTimestamps(input: {
     return undefined
   }
 
+  // One session shows up in several places at once (home, sidebar, tab preview),
+  // so the per-pass lookup is resolved once per id instead of once per row.
+  let timeCache = new Map<string, SessionEntry | undefined>()
+
   const timeFor = (sessionID: string): SessionEntry | undefined => {
+    if (timeCache.has(sessionID)) return timeCache.get(sessionID)
+
+    const entry = resolveTime(sessionID)
+
+    timeCache.set(sessionID, entry)
+
+    return entry
+  }
+
+  const resolveTime = (sessionID: string): SessionEntry | undefined => {
     const found = lookup(sessionID)
 
     if (found?.info.time) {
@@ -167,12 +188,24 @@ export function setupDomTimestamps(input: {
   }
 
   const schedule = () => {
-    if (stopped || passFrame !== undefined) return
+    if (stopped || passFrame !== undefined || passTimer !== undefined) return
 
-    passFrame = requestAnimationFrame(() => {
-      passFrame = undefined
-      render()
-    })
+    const wait = lastPass + PASS_INTERVAL - Date.now()
+
+    if (wait <= 0) {
+      passFrame = requestAnimationFrame(() => {
+        passFrame = undefined
+        lastPass = Date.now()
+        render()
+      })
+
+      return
+    }
+
+    passTimer = setTimeout(() => {
+      passTimer = undefined
+      schedule()
+    }, wait)
   }
 
   const refreshServer = async (serverID: string) => {
@@ -770,6 +803,8 @@ export function setupDomTimestamps(input: {
   function render() {
     if (stopped) return
 
+    timeCache = new Map()
+
     renderToggle()
 
     if (!contextEnabled(input.settings())) {
@@ -817,8 +852,10 @@ export function setupDomTimestamps(input: {
     ),
   )
 
+  // Only structure moves the stamps: streaming text is a character-data storm
+  // and observing it turned every token into a document-wide pass.
   const observer = new MutationObserver(schedule)
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  observer.observe(document.body, { childList: true, subtree: true })
 
   const trackTab = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : undefined
@@ -852,6 +889,7 @@ export function setupDomTimestamps(input: {
     clearInterval(interval)
     clearTimeout(refreshTimer)
     if (passFrame !== undefined) cancelAnimationFrame(passFrame)
+    if (passTimer !== undefined) clearTimeout(passTimer)
     document.removeEventListener("visibilitychange", onVisibility)
     document.removeEventListener("pointerover", trackTab, true)
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe()

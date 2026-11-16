@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.3] - 2026-11-17
+
+### Fixed
+
+- **The window could hang while a response streamed.** The DOM observer watched `characterData` on the whole document, so every token of streamed text scheduled a full render pass, and each pass re-queried every container. Streaming is now ignored (only structure moves the stamps), passes are rate-limited to one per 250 ms instead of one per animation frame, and a session id is resolved once per pass instead of once per row.
+
+---
+
 ## [1.2.2] - 2026-11-15
 
 ### Fixed
