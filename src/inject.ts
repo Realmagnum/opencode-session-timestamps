@@ -2,8 +2,8 @@ import type { Context } from "@opencode/plugin/gui"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { createEffect, on, onCleanup } from "solid-js"
 import { resolveTranslation } from "./i18n"
-import { contextEnabled, datesEnabled, type StoredSettings } from "./settings"
-import { formatAbsolute, formatFull, formatStamp, formatTurn } from "./time"
+import { contextEnabled, datesEnabled, relativeSidebar, type StoredSettings } from "./settings"
+import { formatAbsolute, formatElapsed, formatFull, formatStamp, formatTurn } from "./time"
 
 type SessionEntry = {
   readonly id: string
@@ -21,6 +21,7 @@ type ContextUsage = { readonly percent: number; readonly used: number; readonly 
 const HOME_ROW = '[data-component="home-session-row-container"]'
 const HOME_BUTTON = '[data-component="home-session-row"]'
 const SIDEBAR_ROW = "[data-titlebar-tab-action]"
+const INBOX_ROW = '[data-slot="sidebar-inbox-item"]'
 const TAB_LINK = "[data-titlebar-tab-link]"
 const TIMELINE_ROW = "[data-timeline] [data-timeline-row][data-message-id]"
 const TAB_POPOVER = '[data-component="session-tab-popover"]'
@@ -420,8 +421,10 @@ export function setupDomTimestamps(input: {
 
   // ---- stamps ------------------------------------------------------------
 
-  function writeDate(element: HTMLTimeElement, entry: SessionEntry) {
-    const text = formatStamp(entry.updated, options())
+  function writeDate(element: HTMLTimeElement, entry: SessionEntry, relative: boolean) {
+    const text = relative
+      ? formatElapsed(entry.updated, { translate: (key, params) => t(key, params) })
+      : formatStamp(entry.updated, options())
 
     if (element.textContent !== text) element.textContent = text
 
@@ -454,7 +457,7 @@ export function setupDomTimestamps(input: {
     })
   }
 
-  function ensureDate(trail: HTMLElement, entry: SessionEntry, on: boolean) {
+  function ensureDate(trail: HTMLElement, entry: SessionEntry, on: boolean, relative = false) {
     let element = trail.querySelector<HTMLTimeElement>(':scope > [data-ocst-kind="date"]')
 
     if (!on) {
@@ -470,34 +473,19 @@ export function setupDomTimestamps(input: {
       trail.prepend(element)
     }
 
-    writeDate(element, entry)
+    writeDate(element, entry, relative)
   }
 
-  function ensureRing(trail: HTMLElement, sessionID: string, entry: SessionEntry, on: boolean) {
-    let ring = trail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring"]')
+  function createRing() {
+    const ring = document.createElement("span")
+    ring.dataset.ocstKind = "ring"
+    ring.className = "ocst-ring"
+    ring.innerHTML = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="${RING_RADIUS}" stroke="var(--ocst-ring-track, var(--v2-background-bg-layer-04))" stroke-width="1.5"/><circle data-ocst-arc cx="7" cy="7" r="${RING_RADIUS}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(-90 7 7)"/></svg>`
 
-    if (!on) {
-      ring?.remove()
+    return ring
+  }
 
-      return
-    }
-
-    const usage = usageFor(sessionID, entry)
-
-    if (!usage) {
-      ring?.remove()
-
-      return
-    }
-
-    if (!ring) {
-      ring = document.createElement("span")
-      ring.dataset.ocstKind = "ring"
-      ring.className = "ocst-ring"
-      ring.innerHTML = `<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="${RING_RADIUS}" stroke="var(--ocst-ring-track, var(--v2-background-bg-layer-04))" stroke-width="1.5"/><circle data-ocst-arc cx="7" cy="7" r="${RING_RADIUS}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(-90 7 7)"/></svg>`
-      trail.append(ring)
-    }
-
+  function paintRing(ring: HTMLElement, usage: ContextUsage) {
     const arc = ring.querySelector<SVGCircleElement>("[data-ocst-arc]")
     const percent = Math.max(0, Math.min(100, usage.percent))
     const offset = RING_CIRCUMFERENCE * (1 - percent / 100)
@@ -520,12 +508,68 @@ export function setupDomTimestamps(input: {
     if (ring.title !== title) ring.title = title
   }
 
+  function ensureRing(trail: HTMLElement, sessionID: string, entry: SessionEntry, on: boolean) {
+    let ring = trail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring"]')
+
+    if (!on) {
+      ring?.remove()
+
+      return
+    }
+
+    const usage = usageFor(sessionID, entry)
+
+    if (!usage) {
+      ring?.remove()
+
+      return
+    }
+
+    if (!ring) {
+      ring = createRing()
+      trail.append(ring)
+    }
+
+    paintRing(ring, usage)
+  }
+
+  /**
+   * The Inbox row has no trail of its own: the ring joins the host's trailing
+   * group directly, so an unresolved usage leaves no empty node behind.
+   */
+  function ensureInboxRing(tail: HTMLElement, sessionID: string, entry: SessionEntry, on: boolean) {
+    let ring = tail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring-inbox"]')
+
+    if (!on) {
+      ring?.remove()
+
+      return
+    }
+
+    const usage = usageFor(sessionID, entry)
+
+    if (!usage) {
+      ring?.remove()
+
+      return
+    }
+
+    if (!ring) {
+      ring = createRing()
+      ring.dataset.ocstKind = "ring-inbox"
+      tail.append(ring)
+    }
+
+    paintRing(ring, usage)
+  }
+
   function ensureTrail(
     parent: HTMLElement,
     kind: "home" | "side" | "tab",
     sessionID: string,
     entry: SessionEntry,
     showDate: boolean,
+    relative = false,
   ) {
     const dates = showDate
     const rings = contextEnabled(input.settings())
@@ -544,20 +588,20 @@ export function setupDomTimestamps(input: {
       trail.dataset.ocstTrail = kind
       trail.className = `ocst-trail ocst-trail--${kind}`
 
+      // Sidebar rows already end with a status glyph, so their cluster goes
+      // before it; every other host leaves the trail at the end.
       if (kind === "side") parent.insertBefore(trail, parent.lastElementChild)
       else parent.append(trail)
     }
 
-    ensureDate(trail, entry, dates)
+    ensureDate(trail, entry, dates, relative)
     ensureRing(trail, sessionID, entry, rings)
   }
 
-  function renderSidebar() {
-    const rows = document.querySelectorAll<HTMLElement>(SIDEBAR_ROW)
-
-    if (rows.length === 0) return
-
-    const unique = titles()
+  function renderSidebar(rows: NodeListOf<HTMLElement>, unique: Map<string, SessionEntry>) {
+    const settings = input.settings()
+    const showDate = datesEnabled(settings) && sidebarEnabled(settings)
+    const relative = relativeSidebar(settings)
 
     rows.forEach((row) => {
       const title = row.getAttribute("title")?.trim()
@@ -569,14 +613,55 @@ export function setupDomTimestamps(input: {
         return
       }
 
-      ensureTrail(
-        row,
-        "side",
-        entry.id,
-        entry,
-        datesEnabled(input.settings()) && sidebarEnabled(input.settings()),
-      )
+      ensureTrail(row, "side", entry.id, entry, showDate, relative)
     })
+  }
+
+  /**
+   * The Inbox layout prints its own age on every row and carries no session id,
+   * so only the context ring is added, at the end of the row's trailing cluster
+   * — right of the time. Rows are matched by the title they print, under the
+   * same unique-title rule the sidebar uses; sessions sharing a title keep none.
+   */
+  function renderInbox(rows: NodeListOf<HTMLElement>, unique: Map<string, SessionEntry>) {
+    const rings = contextEnabled(input.settings())
+
+    rows.forEach((row) => {
+      const title = row
+        .querySelector<HTMLElement>(':scope > span:first-child > span[dir="auto"]')
+        ?.textContent?.trim()
+      const entry = title ? unique.get(title) : undefined
+      // The status glyph and the age share the trailing group of the second line.
+      const tail =
+        row.querySelector<HTMLElement>(':scope > span:last-child > span.ms-auto') ??
+        row.querySelector<HTMLElement>(':scope > span:last-child > span:last-child')
+
+      if (!entry || !tail) {
+        row.querySelectorAll<HTMLElement>('[data-ocst-kind="ring-inbox"]').forEach((ring) => ring.remove())
+
+        return
+      }
+
+      ensureInboxRing(tail, entry.id, entry, rings)
+
+      // The host inserts its own glyph and age around our node when a run
+      // starts or ends, so the ring is put back at the end of the cluster.
+      const ring = tail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring-inbox"]')
+
+      if (ring && tail.lastElementChild !== ring) tail.append(ring)
+    })
+  }
+
+  function renderLists() {
+    const sidebar = document.querySelectorAll<HTMLElement>(SIDEBAR_ROW)
+    const inbox = document.querySelectorAll<HTMLElement>(INBOX_ROW)
+
+    if (sidebar.length === 0 && inbox.length === 0) return
+
+    const unique = titles()
+
+    renderSidebar(sidebar, unique)
+    renderInbox(inbox, unique)
   }
 
   function renderTabs() {
@@ -813,7 +898,7 @@ export function setupDomTimestamps(input: {
     }
 
     renderHome()
-    renderSidebar()
+    renderLists()
     renderTabs()
     renderMessages()
   }
@@ -902,6 +987,7 @@ export function setupDomTimestamps(input: {
     remove("context-toggle")
     remove("trail-side")
     remove("trail-tab")
+    remove("ring-inbox")
   })
 
   return { schedule }

@@ -2,7 +2,7 @@ import { For, Show, createMemo } from "solid-js"
 import type { SlotMap } from "@opencode/plugin/gui"
 import type { Context } from "@opencode/plugin/gui"
 import { DEFAULT_SETTINGS, datesEnabled, type StoredSettings, type TimestampClock, type TimestampFormat } from "./settings"
-import { formatFull, formatStamp } from "./time"
+import { formatElapsed, formatFull, formatStamp } from "./time"
 import { resolveTranslation, type TranslationParams } from "./i18n"
 
 const PLUGIN = "session-timestamps"
@@ -381,8 +381,15 @@ export function SettingsView(props: {
     now - 300 * 24 * 60 * 60 * 1000,
   ]
 
+  const elapsedSample = [
+    now - 40 * 60 * 1000,
+    now - 5 * 60 * 60 * 1000,
+    now - 2 * 24 * 60 * 60 * 1000,
+    now - 45 * 24 * 60 * 60 * 1000,
+  ]
+
   const Toggle = (row: {
-    key: "enabled" | "header" | "home" | "sidebar" | "messages" | "contextRing"
+    key: "enabled" | "header" | "home" | "sidebar" | "sidebarRelative" | "messages" | "contextRing"
     label: string
     desc: string
   }) => (
@@ -497,6 +504,12 @@ export function SettingsView(props: {
           </select>
         </div>
 
+        <Toggle
+          key="sidebarRelative"
+          label={t("settings.format.relative")}
+          desc={t("settings.format.relative.desc")}
+        />
+
         <div class="ocst-settings-row">
           <div class="ocst-settings-copy">
             <span class="ocst-settings-label">{t("settings.preview.label")}</span>
@@ -504,6 +517,18 @@ export function SettingsView(props: {
           </div>
           <div class="ocst-preview">
             <For each={sample}>{(value) => <span>{formatStamp(value, options())}</span>}</For>
+          </div>
+        </div>
+
+        <div class="ocst-settings-row">
+          <div class="ocst-settings-copy">
+            <span class="ocst-settings-label">{t("settings.preview.relative")}</span>
+            <span class="ocst-settings-desc">{t("settings.preview.relative.hint")}</span>
+          </div>
+          <div class="ocst-preview">
+            <For each={elapsedSample}>
+              {(value) => <span>{formatElapsed(value, { now, translate: t })}</span>}
+            </For>
           </div>
         </div>
       </div>

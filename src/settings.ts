@@ -15,6 +15,8 @@ export const TimestampSettingsSchema = Schema.Struct({
   home: Schema.Boolean,
   /** Last-activity time on every sidebar session row. */
   sidebar: Schema.optional(Schema.Boolean),
+  /** How long ago instead of the date, for the sidebar rows only. */
+  sidebarRelative: Schema.optional(Schema.Boolean),
   /** Send and answer times inside the transcript. */
   messages: Schema.Boolean,
   /** Context-usage rings in sidebar rows and tabs. */
@@ -32,11 +34,15 @@ export const datesEnabled = (settings: StoredSettings) => settings.enabled !== f
 /** Context rings have their own switch, independent of the date switch. */
 export const contextEnabled = (settings: StoredSettings) => settings.contextRing !== false
 
+/** The sidebar prints elapsed time instead of a date unless switched back to the stamp. */
+export const relativeSidebar = (settings: StoredSettings) => settings.sidebarRelative !== false
+
 export const DEFAULT_SETTINGS: StoredSettings = {
   enabled: true,
   header: true,
   home: true,
   sidebar: true,
+  sidebarRelative: true,
   messages: true,
   contextRing: true,
   format: "auto",

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-11-17
+
+### Added
+
+- **Relative time in the sidebar** — in the side-tabs layout a session row now reads `49m`, `3h`, `2d` (`now` under a minute) instead of the date, the way the Inbox layout already does. It has its own switch under **Format → Relative time in sidebar**, on by default; the tooltip still carries the exact created and updated times, and the settings preview gained a relative sample row.
+- **Context rings in the Inbox layout** — the ring is appended to the trailing group of an Inbox row, right of the row's own elapsed time. It follows the same **Context usage** switch and the same unique-title matching the sidebar uses, so rows sharing a title (and untitled ones) stay ringless.
+
+---
+
 ## [1.2.3] - 2026-11-17
 
 ### Fixed

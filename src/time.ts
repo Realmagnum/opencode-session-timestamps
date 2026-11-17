@@ -71,6 +71,29 @@ export function formatClock(value: number, options: TimeOptions) {
   return new Intl.DateTimeFormat(options.locale, clockOptions(options.clock)).format(date)
 }
 
+export type ElapsedOptions = {
+  /** The instant the label is relative to; the row's own clock in tests. */
+  readonly now?: number
+  readonly translate: (key: string, params?: Record<string, string | number | boolean>) => string
+}
+
+/**
+ * How long ago a session was last active, in the compact shape the Inbox list
+ * uses: `now`, `49m`, `3h`, `2d`. Days keep counting, so a month-old session
+ * reads `31d` rather than a date the reader has to place against today.
+ */
+export function formatElapsed(value: number, options: ElapsedOptions) {
+  if (!Number.isFinite(value)) return ""
+
+  const seconds = Math.max(0, Math.round(((options.now ?? Date.now()) - value) / 1000))
+
+  if (seconds < 60) return options.translate("elapsed.now")
+  if (seconds < 3_600) return options.translate("elapsed.minutes", { count: Math.floor(seconds / 60) })
+  if (seconds < 86_400) return options.translate("elapsed.hours", { count: Math.floor(seconds / 3_600) })
+
+  return options.translate("elapsed.days", { count: Math.floor(seconds / 86_400) })
+}
+
 /** The full date and time for a `title`, where room is not a concern. */
 export function formatFull(value: number, locale: string) {
   const date = new Date(value)
