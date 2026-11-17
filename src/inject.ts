@@ -557,7 +557,12 @@ export function setupDomTimestamps(input: {
     if (!ring) {
       ring = createRing()
       ring.dataset.ocstKind = "ring-inbox"
-      tail.append(ring)
+
+      // The host's elapsed time closes the group: the ring goes just before it.
+      const age = tail.lastElementChild
+
+      if (age) tail.insertBefore(ring, age)
+      else tail.append(ring)
     }
 
     paintRing(ring, usage)
@@ -619,9 +624,10 @@ export function setupDomTimestamps(input: {
 
   /**
    * The Inbox layout prints its own age on every row and carries no session id,
-   * so only the context ring is added, at the end of the row's trailing cluster
-   * — right of the time. Rows are matched by the title they print, under the
-   * same unique-title rule the sidebar uses; sessions sharing a title keep none.
+   * so only the context ring is added, into the row's trailing cluster between
+   * the status glyph and the elapsed time. Rows are matched by the title they
+   * print, under the same unique-title rule the sidebar uses; sessions sharing
+   * a title keep none.
    */
   function renderInbox(rows: NodeListOf<HTMLElement>, unique: Map<string, SessionEntry>) {
     const rings = contextEnabled(input.settings())
@@ -645,10 +651,11 @@ export function setupDomTimestamps(input: {
       ensureInboxRing(tail, entry.id, entry, rings)
 
       // The host inserts its own glyph and age around our node when a run
-      // starts or ends, so the ring is put back at the end of the cluster.
+      // starts or ends, so the ring is put back just before the time.
       const ring = tail.querySelector<HTMLElement>(':scope > [data-ocst-kind="ring-inbox"]')
+      const age = tail.lastElementChild
 
-      if (ring && tail.lastElementChild !== ring) tail.append(ring)
+      if (ring && age && age !== ring && ring.nextElementSibling !== age) tail.insertBefore(ring, age)
     })
   }
 

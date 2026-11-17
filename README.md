@@ -25,7 +25,7 @@ This plugin adds those chronology anchors without touching the server: it reads 
 - **Sidebar session list** — how long ago each session was active (`49m`, `3h`, `2d`), like the Inbox layout, or the date when **Relative time in sidebar** is switched off. Sidebar rows carry no session id in the DOM, so they are matched by their unique title; duplicate titles are skipped.
 - **Session tabs** — a compact clock that reserves the app's 24px status area, so unread/attention dots and the close button never overlap it. Hidden on hover and in tabs narrower than 150px.
 - **Tab hover preview** — separate **Created** and **Updated** lines with localized full dates.
-- **Context usage rings** — every Home row, sidebar row, Inbox row and tab shows the share of the model's context window its last answer used, drawn with the same 14px ring as the session header. Neutral below 80%, amber from 80%, red from 95%; the tooltip names the percentage, used tokens and limit. In the Inbox layout the ring sits right of the row's own elapsed time.
+- **Context usage rings** — every Home row, sidebar row, Inbox row and tab shows the share of the model's context window its last answer used, drawn with the same 14px ring as the session header. Neutral below 80%, amber from 80%, red from 95%; the tooltip names the percentage, used tokens and limit. In the Inbox layout the ring sits between the status glyph and the row's own elapsed time.
 - **Transcript turns** — `15:42 → 15:43` above each user message: when it was sent and when its answer finished. Running turns show the send time only.
 - **Quick switches** — a clock button beside the sidebar toggle hides or shows every date, and a ring button next to it does the same for context rings, both without opening Settings (dimmed when off).
 - **Settings → Session Timestamps** — a master switch and a toggle per surface for dates, a separate **Context usage** section for rings, friendly (`15:42`, `Yesterday, 09:05`, `12 Nov, 15:42`), always-absolute or relative sidebar dates, a 12/24-hour clock, and a live preview in the current language.
@@ -97,7 +97,7 @@ The session header uses the official `session.header` slot. Home/sidebar rows, t
 - Times for loaded sessions come from `ctx.servers[*].data.session` / `data.session.message` (reactive stores).
 - Rows the store never loaded fall back to a bounded `session.list` index (500 newest per server), refreshed on execution, rename, archive and delete events.
 - Sidebar rows are matched by unique title; tabs and their hover preview by the `href`'s `ses_...` id.
-- Inbox rows print their own relative age and carry no session id, so only the context ring is appended, into the trailing group of the second line — right of that time. The title printed in the row is matched under the same unique-title rule.
+- Inbox rows print their own relative age and carry no session id, so only the context ring is appended, into the trailing group of the second line, just before that time. The title printed in the row is matched under the same unique-title rule.
 - Sidebar stamps read `49m` / `3h` / `2d` (`now` under a minute) unless **Relative time in sidebar** is off; the tooltip keeps the exact created and updated times either way.
 - The timeline turn clock maps the user message id to the last assistant `time.completed` of that turn.
 
