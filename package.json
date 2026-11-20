@@ -40,7 +40,8 @@
     "build": "vite build && cp dist/gui-experimental.cjs gui-experimental.cjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "ci": "npm run typecheck && npm test && npm run build"
+    "ci": "npm run typecheck && npm test && npm run build",
+    "check:dom": "node ../opencode-plugin-dom/scripts/check-dom.mjs ."
   },
   "devDependencies": {
     "@opencode/plugin": "^2.3.0",
@@ -48,5 +49,8 @@
     "typescript": "^5.9.3",
     "vite": "^8.3.6",
     "vite-plugin-solid": "^2.11.15"
+  },
+  "dependencies": {
+    "opencode-plugin-dom": "file:../opencode-plugin-dom"
   }
 }

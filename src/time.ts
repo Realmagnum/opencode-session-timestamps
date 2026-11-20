@@ -7,6 +7,41 @@ export type TimeOptions = {
 }
 
 const DAY = 86_400_000
+/** Bounds the formatter cache; a few locales and clock variants never reach it. */
+const FORMAT_CACHE_LIMIT = 64
+
+/**
+ * Building an `Intl` formatter is expensive next to `format`, and a pass over
+ * every visible row asks for the same one repeatedly. Formatters are immutable,
+ * so one per locale and option set is shared for the window's lifetime.
+ */
+const formats = new Map<string, Intl.DateTimeFormat>()
+const relativeFormats = new Map<string, Intl.RelativeTimeFormat>()
+
+function dateFormat(locale: string, options: Intl.DateTimeFormatOptions) {
+  const key = `${locale}\u0000${JSON.stringify(options)}`
+  let format = formats.get(key)
+
+  if (!format) {
+    if (formats.size >= FORMAT_CACHE_LIMIT) formats.clear()
+
+    format = new Intl.DateTimeFormat(locale, options)
+    formats.set(key, format)
+  }
+
+  return format
+}
+
+function relativeFormat(locale: string) {
+  let format = relativeFormats.get(locale)
+
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+    relativeFormats.set(locale, format)
+  }
+
+  return format
+}
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -21,7 +56,7 @@ function clockOptions(clock: TimestampClock): Intl.DateTimeFormatOptions {
 
 /** A locale's own word for today or yesterday; capitalised for a label, not a sentence. */
 function relativeDay(days: number, locale: string) {
-  const label = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(-days, "day")
+  const label = relativeFormat(locale).format(-days, "day")
 
   return label ? `${label[0]?.toLocaleUpperCase(locale)}${label.slice(1)}` : label
 }
@@ -36,10 +71,10 @@ export function formatStamp(value: number, options: TimeOptions) {
   if (Number.isNaN(date.getTime())) return ""
 
   const now = new Date()
-  const time = new Intl.DateTimeFormat(options.locale, clockOptions(options.clock)).format(date)
+  const time = dateFormat(options.locale, clockOptions(options.clock)).format(date)
 
   if (options.format === "absolute") {
-    const day = new Intl.DateTimeFormat(options.locale, {
+    const day = dateFormat(options.locale, {
       day: "numeric",
       month: "short",
       year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
@@ -53,7 +88,7 @@ export function formatStamp(value: number, options: TimeOptions) {
   if (days === 0) return time
   if (days === 1) return `${relativeDay(1, options.locale)}, ${time}`
 
-  const day = new Intl.DateTimeFormat(options.locale, {
+  const day = dateFormat(options.locale, {
     day: "numeric",
     month: "short",
     year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
@@ -68,7 +103,7 @@ export function formatClock(value: number, options: TimeOptions) {
 
   if (Number.isNaN(date.getTime())) return ""
 
-  return new Intl.DateTimeFormat(options.locale, clockOptions(options.clock)).format(date)
+  return dateFormat(options.locale, clockOptions(options.clock)).format(date)
 }
 
 export type ElapsedOptions = {
@@ -100,7 +135,7 @@ export function formatFull(value: number, locale: string) {
 
   if (Number.isNaN(date.getTime())) return ""
 
-  return new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "medium" }).format(date)
+  return dateFormat(locale, { dateStyle: "full", timeStyle: "medium" }).format(date)
 }
 
 /** A date and time for a tooltip row: enough to place the session, without the weekday. */
@@ -109,7 +144,7 @@ export function formatAbsolute(value: number, locale: string) {
 
   if (Number.isNaN(date.getTime())) return ""
 
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date)
+  return dateFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 
 /** A turn's send time, and its answer time when the turn has finished. */

@@ -7,7 +7,6 @@ import { resolveTranslation, type TranslationParams } from "./i18n"
 
 const PLUGIN = "session-timestamps"
 
-const GEAR_SVG = `<svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.62516 4.46094L5.05225 3.86719L3.86475 5.05469L4.4585 7.6276L2.0835 9.21094V10.7943L4.4585 12.3776L3.86475 14.9505L5.05225 16.138L7.62516 15.5443L9.2085 17.9193H10.7918L12.3752 15.5443L14.9481 16.138L16.1356 14.9505L15.5418 12.3776L17.9168 10.7943V9.21094L15.5418 7.6276L16.1356 5.05469L14.9481 3.86719L12.3752 4.46094L10.7918 2.08594H9.2085L7.62516 4.46094Z" stroke="currentColor"/><path d="M12.5002 10.0026C12.5002 11.3833 11.3809 12.5026 10.0002 12.5026C8.61945 12.5026 7.50016 11.3833 7.50016 10.0026C7.50016 8.62189 8.61945 7.5026 10.0002 7.5026C11.3809 7.5026 12.5002 8.62189 12.5002 10.0026Z" stroke="currentColor"/></svg>`
 
 export const GUI_CSS = `
 .ocst-header {
@@ -209,84 +208,10 @@ export const GUI_CSS = `
 }
 .ocst-reset:hover { color: var(--v2-text-text-base, light-dark(#121212, #ffffff)); }
 
-.plugin-settings-gear-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 4px;
-  background: transparent;
-  border: none;
-  color: var(--v2-text-text-muted, light-dark(#6b6b6b, #8a8a8a));
-  cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
-  flex-shrink: 0;
-}
-.plugin-settings-gear-btn:hover {
-  color: light-dark(#6b4fae, #b392f0) !important;
-  background-color: var(--v2-background-bg-layer-02, light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.08)));
-}
-.plugin-settings-gear-btn svg { width: 16px; height: 16px; }
-
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"][data-value="${PLUGIN}"] [data-slot="tabs-v2-trigger"] svg {
   color: light-dark(#6b4fae, #9d7cd8) !important;
 }
 `
-
-export function setupSettingsGear() {
-  if (typeof document === "undefined") return
-
-  function navigateToSettings() {
-    const trigger = document.querySelector<HTMLElement>(
-      `.settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"][data-value="${PLUGIN}"] button, .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"][data-value="${PLUGIN}"] [data-slot="tabs-v2-trigger"]`,
-    )
-
-    if (trigger) {
-      trigger.click()
-
-      return
-    }
-
-    const url = new URL(window.location.href)
-    url.searchParams.set("tab", PLUGIN)
-    window.history.pushState({}, "", url.toString())
-    window.dispatchEvent(new PopStateEvent("popstate"))
-  }
-
-  function inject() {
-    for (const row of Array.from(document.querySelectorAll(".settings-extension-row"))) {
-      const name = row.querySelector(".settings-extension-name")?.textContent?.trim() ?? ""
-
-      if (!name.includes(PLUGIN)) continue
-
-      const actions = row.querySelector(".settings-servers-actions")
-
-      if (!actions || actions.querySelector(`.${PLUGIN}-settings-btn`)) continue
-
-      const button = document.createElement("button")
-      button.type = "button"
-      button.className = `plugin-settings-gear-btn ${PLUGIN}-settings-btn`
-      button.title = "Open settings"
-      button.setAttribute("aria-label", "Open settings")
-      button.innerHTML = GEAR_SVG
-      button.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        navigateToSettings()
-      })
-      actions.insertBefore(button, actions.firstElementChild)
-    }
-  }
-
-  inject()
-
-  const observer = new MutationObserver(inject)
-  observer.observe(document.body, { childList: true, subtree: true })
-
-  return () => observer.disconnect()
-}
 
 export function SessionHeaderStamp(props: {
   ctx: Context

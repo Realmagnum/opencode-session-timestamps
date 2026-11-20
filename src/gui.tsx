@@ -2,7 +2,7 @@ import { createEffect } from "solid-js"
 import { Plugin, SettingsPage, Slot, Store, Style } from "@opencode/plugin/gui"
 import type { Persisted } from "@opencode/plugin/gui"
 import { DEFAULT_SETTINGS, TimestampSettingsSchema, contextEnabled, datesEnabled, type StoredSettings } from "./settings"
-import { GUI_CSS, SessionHeaderStamp, SettingsView, setupSettingsGear } from "./settings-view"
+import { GUI_CSS, SessionHeaderStamp, SettingsView } from "./settings-view"
 import { I18N_CATALOG, resolveTranslation, type TranslationParams } from "./i18n"
 import { setupDomTimestamps } from "./inject"
 
@@ -74,6 +74,5 @@ export default Plugin.define({
       dom.schedule()
     })
 
-    setupSettingsGear()
   },
 })

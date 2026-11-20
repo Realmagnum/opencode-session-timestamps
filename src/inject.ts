@@ -1,6 +1,7 @@
 import type { Context } from "@opencode/plugin/gui"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { createEffect, on, onCleanup } from "solid-js"
+import { createMutationGate } from "opencode-plugin-dom"
 import { resolveTranslation } from "./i18n"
 import { contextEnabled, datesEnabled, relativeSidebar, type StoredSettings } from "./settings"
 import { formatAbsolute, formatElapsed, formatFull, formatStamp, formatTurn } from "./time"
@@ -78,11 +79,9 @@ export function setupDomTimestamps(input: {
   const refreshing = new Set<string>()
   const unsubscribes: Array<() => void> = []
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
-  let passFrame: number | undefined
-  let passTimer: ReturnType<typeof setTimeout> | undefined
-  let lastPass = 0
   let stopped = false
   let lastTab: string | undefined
+  let titlesCache: { at: number; titles: Map<string, SessionEntry> } | undefined
 
   // Context usage by session id, keyed by the session's `time.updated` so a
   // finished turn refetches while repaints do not.
@@ -150,8 +149,18 @@ export function setupDomTimestamps(input: {
     return index.get(sessionID)
   }
 
-  /** Sessions whose title is unique, so a sidebar row can be matched to one session. */
+  /** How long a title index serves passes before it is rebuilt. */
+  const TITLES_TTL = 1_000
+
+  /**
+   * Sessions whose title is unique, so a sidebar row can be matched to one session.
+   * Built from every session of every server, so it is cached between passes: a
+   * streamed answer moves no title, and rebuilding this per pass was the most
+   * expensive part of one.
+   */
   const titles = () => {
+    if (titlesCache && Date.now() - titlesCache.at < TITLES_TTL) return titlesCache.titles
+
     const sessions = new Map<string, SessionEntry>()
 
     for (const serverID of input.ctx.servers.list()) {
@@ -185,29 +194,65 @@ export function setupDomTimestamps(input: {
       if (title && counts.get(title) === 1) unique.set(title, entry)
     }
 
+    titlesCache = { at: Date.now(), titles: unique }
+
     return unique
   }
 
-  const schedule = () => {
-    if (stopped || passFrame !== undefined || passTimer !== undefined) return
+  /**
+   * The rows and chrome this plugin decorates. A mutation anywhere else cannot
+   * change a stamp, so it must not wake a pass: the transcript alone produces
+   * hundreds of mutations a second.
+   */
+  const DECORATED = [
+    HOME_ROW,
+    SIDEBAR_ROW,
+    INBOX_ROW,
+    TAB_LINK,
+    "[data-titlebar-tab]",
+    TAB_POPOVER,
+    SIDEBAR_TOGGLE,
+  ].join(",")
 
-    const wait = lastPass + PASS_INTERVAL - Date.now()
+  const TIMELINE = "[data-timeline]"
 
-    if (wait <= 0) {
-      passFrame = requestAnimationFrame(() => {
-        passFrame = undefined
-        lastPass = Date.now()
-        render()
-      })
+  const decorated = (node: Node) =>
+    node instanceof Element && (node.matches(DECORATED) || node.querySelector(DECORATED) !== null)
 
-      return
+  const carriesRow = (node: Node) =>
+    node instanceof Element && (node.matches(TIMELINE_ROW) || node.querySelector(TIMELINE_ROW) !== null)
+
+  function relevantMutation(records: readonly MutationRecord[]) {
+    for (const record of records) {
+      if (record.type !== "childList") continue
+
+      const target = record.target
+
+      if (target === document.body) return true
+
+      // Inside the transcript only a row appearing or disappearing matters: a
+      // token or a streamed tool block changes no stamp.
+      if (target instanceof Element && target.closest(TIMELINE)) {
+        for (const node of record.addedNodes) if (carriesRow(node)) return true
+        for (const node of record.removedNodes) if (carriesRow(node)) return true
+
+        continue
+      }
+
+      if (target instanceof Element && target.closest(DECORATED)) return true
+
+      for (const node of record.addedNodes) if (decorated(node)) return true
+      for (const node of record.removedNodes) if (decorated(node)) return true
     }
 
-    passTimer = setTimeout(() => {
-      passTimer = undefined
-      schedule()
-    }, wait)
+    return false
   }
+
+  // A pass walks every row, so the shared gate runs it only for a relevant batch,
+  // at most once per PASS_INTERVAL, and never while the window is hidden.
+  const gate = createMutationGate({ run: render, interval: PASS_INTERVAL, relevant: relevantMutation })
+
+  const schedule = gate.schedule
 
   const refreshServer = async (serverID: string) => {
     if (stopped || refreshing.has(serverID)) return
@@ -222,6 +267,8 @@ export function setupDomTimestamps(input: {
       const response = await client.session.list({ limit: REFRESH_LIMIT, order: "desc", parentID: null })
 
       if (stopped) return
+
+      titlesCache = undefined
 
       for (const session of response.data) {
         index.set(session.id, {
@@ -807,18 +854,39 @@ export function setupDomTimestamps(input: {
     element.dateTime = new Date(turn.answered ?? turn.sent).toISOString()
   }
 
+  /** Row stamps are idempotent; the transcript streams far faster than they change. */
+  const MESSAGE_PASS_INTERVAL = 2_000
+  let messagesAt = 0
+  let messagesRows = -1
+  let messagesSession: string | undefined
+
   function renderMessages() {
+    const settings = input.settings()
     const session = input.ctx.sessions.current()
 
-    if (!datesEnabled(input.settings()) || !input.settings().messages || !session) {
+    if (!datesEnabled(settings) || !settings.messages || !session) {
+      messagesAt = 0
+      messagesRows = -1
+      messagesSession = undefined
       remove("turn")
 
       return
     }
 
+    const rows = document.querySelectorAll<HTMLElement>(TIMELINE_ROW)
+    const now = Date.now()
+
+    // A new row or another session earns a pass at once; otherwise the stamps
+    // refresh on their own slower cadence than the rest of the DOM.
+    if (session.id === messagesSession && rows.length === messagesRows && now - messagesAt < MESSAGE_PASS_INTERVAL) return
+
+    messagesAt = now
+    messagesRows = rows.length
+    messagesSession = session.id
+
     const turns = turnsFor(session.id, session.server.id)
 
-    document.querySelectorAll<HTMLElement>(TIMELINE_ROW).forEach((row) => {
+    rows.forEach((row) => {
       if (row.dataset.timelineRow !== "UserMessage") return
 
       const messageID = row.dataset.messageId
@@ -913,7 +981,10 @@ export function setupDomTimestamps(input: {
   const subscribe = () => {
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe()
 
-    const update = () => refresh(REFRESH_DEBOUNCE)
+    const update = () => {
+      titlesCache = undefined
+      refresh(REFRESH_DEBOUNCE)
+    }
 
     for (const serverID of input.ctx.servers.list()) {
       const data = input.ctx.servers.get(serverID)?.data
@@ -944,11 +1015,6 @@ export function setupDomTimestamps(input: {
     ),
   )
 
-  // Only structure moves the stamps: streaming text is a character-data storm
-  // and observing it turned every token into a document-wide pass.
-  const observer = new MutationObserver(schedule)
-  observer.observe(document.body, { childList: true, subtree: true })
-
   const trackTab = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : undefined
     const href = target?.closest("[data-titlebar-tab]")?.querySelector<HTMLAnchorElement>(TAB_LINK)?.getAttribute("href")
@@ -977,11 +1043,9 @@ export function setupDomTimestamps(input: {
 
   onCleanup(() => {
     stopped = true
-    observer.disconnect()
+    gate.stop()
     clearInterval(interval)
     clearTimeout(refreshTimer)
-    if (passFrame !== undefined) cancelAnimationFrame(passFrame)
-    if (passTimer !== undefined) clearTimeout(passTimer)
     document.removeEventListener("visibilitychange", onVisibility)
     document.removeEventListener("pointerover", trackTab, true)
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe()
